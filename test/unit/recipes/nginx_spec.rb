@@ -36,8 +36,8 @@ describe 'postfixadmin::nginx' do
       .and_return(true)
   end
 
-  it 'includes nginx recipe' do
-    expect(chef_run).to include_recipe('nginx')
+  it 'includes chef_nginx recipe' do
+    expect(chef_run).to include_recipe('chef_nginx')
   end
 
   it 'includes postfixadmin::php_fpm recipe' do

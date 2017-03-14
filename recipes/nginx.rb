@@ -25,7 +25,7 @@ end
 
 http_port = node['postfixadmin']['port'] || default_http_port
 
-include_recipe 'nginx'
+include_recipe 'chef_nginx'
 include_recipe 'postfixadmin::php_fpm'
 
 # Disable apache2, required for Debian 6

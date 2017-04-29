@@ -53,7 +53,7 @@ depends 'openssl', '~> 6.0'
 depends 'php', '~> 2.0'
 depends 'php-fpm', '>= 0.7'
 depends 'postgresql', '~> 6.0'
-depends 'mysql2_chef_gem', '~> 1.0'
+depends 'mysql2_chef_gem', '~> 2.0'
 depends 'ssl_certificate', '~> 2.0'
 depends 'yum-epel', '~> 0.5'
 

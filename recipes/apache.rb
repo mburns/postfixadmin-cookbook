@@ -19,24 +19,40 @@
 # limitations under the License.
 #
 
-def default_http_port
-  node['postfixadmin']['ssl'] ? 443 : 80
-end
+Chef::Recipe.send(:include, PostfixadminCookbook::RecipeHelpers)
 
 def update_listen_ports(port)
-  return if node['apache']['listen_ports'].include?(port)
-  node.set['apache']['listen_ports'] =
-    node['apache']['listen_ports'] + [port]
+  listen_ports = node['apache']['listen_ports']
+  if listen_ports.nil?
+    node.default['apache']['listen_ports'] = [port]
+  elsif !listen_ports.include?(port)
+    node.default['apache']['listen_ports'] = listen_ports + [port]
+  end
 end
 
-http_port = node['postfixadmin']['port'] || default_http_port
-update_listen_ports(http_port)
+# Fix apache cookbook version 3.2.2 issue:
+# https://github.com/sous-chefs/apache2/pull/422
+def fix_apache_cookbook_pr422
+  if node['apache']['listen_addresses'].nil?
+    node.default['apache']['listen_addresses'] = %w(*)
+  end
+  if node['apache']['listen_ports'].nil?
+    node.default['apache']['listen_ports'] = %w(80 443)
+  end
+end
+
+fix_apache_cookbook_pr422
+
+default_port = self.default_port
+default_ssl = self.default_ssl
+
+update_listen_ports(default_port)
 
 include_recipe 'apache2::default'
 include_recipe 'php'
 include_recipe 'apache2::mod_php5'
 
-if node['postfixadmin']['ssl']
+if default_ssl
   cert = ssl_certificate 'postfixadmin' do
     namespace node['postfixadmin']
     notifies :restart, 'service[apache2]'
@@ -53,9 +69,9 @@ web_app 'postfixadmin' do
   server_name node['postfixadmin']['server_name']
   server_aliases node['postfixadmin']['server_aliases']
   headers node['postfixadmin']['headers']
-  port http_port
+  port default_port
   directory_options %w(-Indexes +FollowSymLinks +MultiViews)
-  if node['postfixadmin']['ssl']
+  if default_ssl
     ssl_key cert.key_path
     ssl_cert cert.cert_path
     ssl_chain cert.chain_path
@@ -75,5 +91,5 @@ ruby_block 'web_app-postfixadmin-reload' do
   subscribes :create, 'execute[a2ensite postfixadmin.conf]', :immediately
   # required by lwrp-ssl-centos-510:
   subscribes :create, 'template[config.local.php]', :immediately
-  notifies :reload, 'service[apache2]', :immediately
+  notifies :restart, 'service[apache2]', :immediately
 end

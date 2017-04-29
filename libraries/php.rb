@@ -18,7 +18,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-module PostfixAdmin
+require_relative 'conf'
+
+module PostfixadminCookbook
   # Some helpers to emulate some PHP functions
   module PHP
     def mt_rand(min, max)
@@ -47,20 +49,20 @@ module PostfixAdmin
     def self.ruby_value_to_php(value)
       case value
       when nil then 'NULL'
-      when Fixnum, Float then v
-      when Array then PostfixAdmin::PHP.array(v)
-      when Hash then PostfixAdmin::PHP.hash(v)
+      when Integer, Float then value
+      when Array then PostfixadminCookbook::PHP.array(value)
+      when Hash then PostfixadminCookbook::PHP.hash(value)
       end
     end
 
     def self.php_from_template(template, obj)
       eruby = Erubis::Eruby.new(template)
-      eruby.evaluate(obj: obj, PostfixAdmin_Conf: PostfixAdmin::Conf)
+      eruby.evaluate(obj: obj, PostfixAdmin_Conf: PostfixadminCookbook::Conf)
     end
 
     def self.array(ary)
       template =
-'array(<%=
+        'array(<%=
   list = @obj.kind_of?(Array) ? @obj : [ @obj ]
   list.map do |item|
     @PostfixAdmin_Conf.value(item)
@@ -71,9 +73,9 @@ module PostfixAdmin
 
     def self.hash(hs)
       template =
-'array(<%=
+        'array(<%=
   @obj.to_hash.sort.map do |k, v|
-    "#{@PostfixAdmin_Conf.value(v)} => #{@PostfixAdmin_Conf.value(k)}"
+    "#{@PostfixAdmin_Conf.value(k)} => #{@PostfixAdmin_Conf.value(v)}"
   end.join(", ")
 %>)'
       php_from_template(template, hs)

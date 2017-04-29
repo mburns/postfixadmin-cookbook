@@ -19,11 +19,7 @@
 # limitations under the License.
 #
 
-def default_http_port
-  node['postfixadmin']['ssl'] ? 443 : 80
-end
-
-http_port = node['postfixadmin']['port'] || default_http_port
+Chef::Recipe.send(:include, PostfixadminCookbook::RecipeHelpers)
 
 include_recipe 'chef_nginx'
 include_recipe 'postfixadmin::php_fpm'
@@ -42,12 +38,12 @@ template_variables = {
   server_name: node['postfixadmin']['server_name'],
   server_aliases: node['postfixadmin']['server_aliases'],
   docroot: "#{node['ark']['prefix_root']}/postfixadmin",
-  port: http_port,
+  port: default_port,
   fastcgi_pass: fastcgi_pass,
   headers: node['postfixadmin']['headers']
 }
 
-if node['postfixadmin']['ssl']
+if default_ssl
   cert = ssl_certificate 'postfixadmin' do
     namespace node['postfixadmin']
     notifies :restart, 'service[nginx]' # TODO: reload?
@@ -70,12 +66,8 @@ template File.join(node['nginx']['dir'], 'sites-available', 'postfixadmin') do
   notifies :reload, 'service[nginx]'
 end
 
-r = nginx_site 'postfixadmin' do
+nginx_site 'postfixadmin' do
   enable true
-end
-
-# Requierd by the LWRP
-if r.is_a?(::Chef::Resource) # Only works with Chef 12
-  r.notifies(:restart, 'service[nginx]', :immediately)
-  r.notifies(:restart, 'service[php-fpm]', :immediately)
+  notifies :restart, 'service[nginx]', :immediately
+  notifies :restart, 'service[php-fpm]', :immediately
 end

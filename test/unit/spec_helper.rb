@@ -24,7 +24,10 @@ require 'chefspec/berkshelf'
 require 'webmock/rspec'
 require 'should_not/rspec'
 
+require_relative 'support/coverage'
 require_relative 'support/matchers'
+require_relative 'support/cookbook_stubs'
+require_relative 'support/unit_test_helpers'
 
 RSpec.configure do |config|
   # Prohibit using the should syntax
@@ -36,7 +39,11 @@ RSpec.configure do |config|
   # order dependency and want to debug it, you can fix the order by providing
   # the seed, which is printed after each run.
   # --seed 1234
-  config.order = 'random'
+  # config.order = 'random'
+  # Library tests first (they are capitalized) to not interfere with coverage
+  config.register_ordering(:global) do |list|
+    list.sort_by(&:description)
+  end
 
   # ChefSpec configuration
   config.log_level = :fatal
@@ -46,8 +53,10 @@ RSpec.configure do |config|
   config.platform = 'ubuntu'
   config.version = '12.04'
 
+  config.include UnitTestHelpers
+
   # Allow all web connections by default
-  WebMock.allow_net_connect!
+  WebMock.allow_net_connect!(net_http_connect_on_start: true)
 end
 
 at_exit { ChefSpec::Coverage.report! }

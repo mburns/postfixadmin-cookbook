@@ -19,10 +19,6 @@
 # limitations under the License.
 #
 
-node.default['postfixadmin']['database']['password'] = 'postfix_pass'
-node.default['postfixadmin']['setup_password'] = 'admin'
-node.default['postfixadmin']['setup_password_salt'] = 'salt'
-
 include_recipe "postfixadmin_test::_#{node['postfixadmin']['database']['type']}"
 include_recipe 'postfixadmin'
 if node['postfixadmin']['web_server'].is_a?(String)
@@ -31,5 +27,6 @@ end
 
 # Required for the integration tests
 package 'patch'
+package 'bzip2'
 include_recipe 'phantomjs'
 include_recipe 'nokogiri'

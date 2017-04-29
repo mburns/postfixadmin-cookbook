@@ -19,22 +19,14 @@
 # limitations under the License.
 
 if defined?(ChefSpec)
-
-  [
-    :postfixadmin_admin,
-    :postfixadmin_alias,
-    :postfixadmin_alias_domain,
-    :postfixadmin_domain,
-    :postfixadmin_mailbox
-  ].each do |matcher|
-    if ChefSpec.respond_to?(:define_matcher)
-      # ChefSpec >= 4.1
-      ChefSpec.define_matcher matcher
-    elsif defined?(ChefSpec::Runner) &&
-          ChefSpec::Runner.respond_to?(:define_runner_method)
-      # ChefSpec < 4.1
-      ChefSpec::Runner.define_runner_method matcher
-    end
+  %i(
+    postfixadmin_admin
+    postfixadmin_alias
+    postfixadmin_alias_domain
+    postfixadmin_domain
+    postfixadmin_mailbox
+  ).each do |matcher|
+    ChefSpec.define_matcher matcher
   end
 
   def create_postfixadmin_admin(user)
@@ -43,9 +35,9 @@ if defined?(ChefSpec)
     )
   end
 
-  def remove_postfixadmin_admin(user)
+  def delete_postfixadmin_admin(user)
     ChefSpec::Matchers::ResourceMatcher.new(
-      :postfixadmin_admin, :remove, user
+      :postfixadmin_admin, :delete, user
     )
   end
 
@@ -55,9 +47,21 @@ if defined?(ChefSpec)
     )
   end
 
+  def delete_postfixadmin_alias(address)
+    ChefSpec::Matchers::ResourceMatcher.new(
+      :postfixadmin_alias, :delete, address
+    )
+  end
+
   def create_postfixadmin_alias_domain(alias_domain)
     ChefSpec::Matchers::ResourceMatcher.new(
       :postfixadmin_alias_domain, :create, alias_domain
+    )
+  end
+
+  def delete_postfixadmin_alias_domain(alias_domain)
+    ChefSpec::Matchers::ResourceMatcher.new(
+      :postfixadmin_alias_domain, :delete, alias_domain
     )
   end
 
@@ -67,10 +71,21 @@ if defined?(ChefSpec)
     )
   end
 
+  def delete_postfixadmin_domain(domain)
+    ChefSpec::Matchers::ResourceMatcher.new(
+      :postfixadmin_domain, :delete, domain
+    )
+  end
+
+  def delete_postfixadmin_mailbox(mailbox)
+    ChefSpec::Matchers::ResourceMatcher.new(
+      :postfixadmin_mailbox, :delete, mailbox
+    )
+  end
+
   def create_postfixadmin_mailbox(mailbox)
     ChefSpec::Matchers::ResourceMatcher.new(
       :postfixadmin_mailbox, :create, mailbox
     )
   end
-
 end

@@ -18,7 +18,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-module PostfixAdmin
+require_relative 'php'
+
+module PostfixadminCookbook
   # Method helpers to be used from configuration templates
   module Conf
     def self.value(value)
@@ -26,7 +28,7 @@ module PostfixAdmin
       when TrueClass then "'YES'"
       when FalseClass then "'NO'"
       else
-        PostfixAdmin::PHP.ruby_value_to_php(value) || "'#{value}'"
+        PostfixadminCookbook::PHP.ruby_value_to_php(value) || "'#{value}'"
       end
     end
   end

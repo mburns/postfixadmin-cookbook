@@ -19,9 +19,10 @@
 # limitations under the License.
 #
 
-::Chef::Recipe.send(:include, Opscode::OpenSSL::Password)
-::Chef::Recipe.send(:include, PostfixAdmin::PHP)
-::Chef::Recipe.send(:include, Chef::EncryptedAttributesHelpers)
+# include the #random_password method:
+Chef::Recipe.send(:include, OpenSSLCookbook::RandomPassword)
+Chef::Recipe.send(:include, PostfixadminCookbook::PHP)
+Chef::Recipe.send(:include, Chef::EncryptedAttributesHelpers)
 
 if %w(centos).include?(node['platform']) && node['platform_version'].to_i >= 7
   include_recipe 'yum-epel' # required for php-imap
@@ -33,7 +34,7 @@ pkgs_php_db =
   if db_type != 'requirements' && node['postfixadmin']['packages'].key?(db_type)
     node['postfixadmin']['packages'][db_type]
   else
-    fail "Unknown database type: #{db_type}"
+    raise "Unknown database type: #{db_type}"
   end
 pkgs_php_db.each do |pkg|
   package pkg do
@@ -51,18 +52,20 @@ self.encrypted_attributes_enabled = node['postfixadmin']['encrypt_attributes']
 
 db_password =
   encrypted_attribute_write(%w(postfixadmin database password)) do
-    secure_password
+    random_password
   end
 setup_password =
   encrypted_attribute_write(%w(postfixadmin setup_password)) do
-    secure_password
+    random_password
   end
 setup_password_encrypted =
   encrypted_attribute_write(%w(postfixadmin setup_password_encrypted)) do
     encrypt_setup_password(setup_password, generate_setup_password_salt)
   end
 
-chef_gem 'sequel'
+chef_gem 'addressable' do
+  compile_time false
+end
 
 if node['postfixadmin']['database']['manage'].nil?
   node.default['postfixadmin']['database']['manage'] =
@@ -136,7 +139,7 @@ if node['postfixadmin']['database']['manage']
     end
 
   else
-    fail "Unknown database type: #{db_type}"
+    raise "Unknown database type: #{db_type}"
   end
 end # if manage database
 
@@ -149,17 +152,26 @@ end
 web_server = node['postfixadmin']['web_server']
 if %w(apache nginx).include?(web_server)
   include_recipe "postfixadmin::#{web_server}"
+  web_user = node[web_server]['user']
   web_group = node[web_server]['group']
 else
+  web_user = nil
   web_group = nil
 end
 
-template 'config.local.php' do
-  path "#{node['ark']['prefix_root']}/postfixadmin/config.local.php"
+directory "#{node['ark']['prefix_root']}/postfixadmin/templates_c" do
+  owner web_user
+  group web_group
+  mode '00750'
+  not_if { web_user.nil? || web_group.nil? }
+end
+
+template "#{node['ark']['prefix_root']}/postfixadmin/config.local.php" do
   source 'config.local.php.erb'
   owner 'root'
   group web_group
   mode '0640'
+  sensitive true
   variables(
     db_type: db_type,
     db_host: node['postfixadmin']['database']['host'],

@@ -19,7 +19,7 @@
 
 require_relative '../spec_helper'
 
-describe 'postfixadmin::postgresql' do
+describe 'postfixadmin::postgresql', order: :random do
   let(:db_password) { 'postfixadmin_pass' }
   let(:chef_run) do
     ChefSpec::SoloRunner.new do |node|

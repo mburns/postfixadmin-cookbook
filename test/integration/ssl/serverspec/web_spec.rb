@@ -1,6 +1,7 @@
 # encoding: UTF-8
 #
 # Author:: Xabier de Zuazo (<xabier@zuazo.org>)
+# Copyright:: Copyright (c) 2017 Xabier de Zuazo
 # Copyright:: Copyright (c) 2015 Onddo Labs, SL.
 # License:: Apache License, Version 2.0
 #
@@ -20,9 +21,11 @@
 require_relative '../../../kitchen/data/spec_helper'
 
 describe server(:web) do
-  describe http('https://127.0.0.1/login.php', ssl: { verify: false }) do
-    it 'includes PHP cookie' do
-      expect(response['Set-Cookie']).to include 'PHPSESSID'
+  site = 'https://127.0.0.1'
+
+  describe http("#{site}/login.php", ssl: { verify: false }) do
+    it 'includes PotfixAdmin cookie' do
+      expect(response['Set-Cookie']).to include 'postfixadmin_session'
     end
 
     it 'returns "Postfix Admin" string' do
@@ -30,7 +33,7 @@ describe server(:web) do
     end
   end # http /login.php
 
-  describe http('https://127.0.0.1/setup.php', ssl: { verify: false }) do
+  describe http("#{site}/setup.php", ssl: { verify: false }) do
     it 'setup.php returns that everything is fine' do
       expect(response.body).to include('Everything seems fine')
     end
@@ -40,12 +43,12 @@ describe server(:web) do
     end
   end # http /setup.php
 
-  describe capybara('https://127.0.0.1') do
+  describe capybara(site), if: phantomjs? do
     let(:user_email) { 'admin@admin.org' }
     let(:user_password) { 'p@ssw0rd1' }
     # Hack to avoid forcing to use "http://" in
     # Infrataster::Contexts::CapybaraContext#before_each
-    before { Capybara.app_host = 'https://127.0.0.1' }
+    before { Capybara.app_host = site }
 
     it 'signs in' do
       visit '/login.php'
@@ -55,32 +58,76 @@ describe server(:web) do
       expect(page).to have_content 'Logged in as admin@admin.org'
     end
 
-    it 'lists admins' do
-      visit '/list-admin.php'
+    it 'list setup admin' do
+      visit '/list.php?table=admin'
       expect(find('#admin_table')).to have_content 'admin@admin.org'
     end
 
     it 'lists domains' do
-      visit '/list-domain.php'
+      visit '/list.php?table=domain'
       expect(find('#admin_table')).to have_content 'foobar.com'
+    end
+
+    it 'does not list deleted domains' do
+      visit '/list.php?table=domain'
+      expect(find('#admin_table')).to_not have_content 'todelete.com'
+    end
+
+    it 'lists admins' do
+      visit '/list.php?table=admin'
+      expect(find('#admin_table')).to have_content 'admin2@foobar.com'
+    end
+
+    it 'does not list deleted admins' do
+      visit '/list.php?table=admin'
+      expect(find('#admin_table'))
+        .to_not have_content 'todelete.admin@foobar.com'
     end
 
     context 'in virtual list' do
       before { visit '/list-virtual.php?domain=foobar.com' }
 
       it 'lists domain aliases' do
-        expect(find('#alias_domain_table')).to have_content 'example.com'
+        expect(first('#admin_table tr:nth-child(2) > td:nth-child(1)'))
+          .to have_content 'example.com'
+      end
+
+      it 'does not list deleted domain aliases' do
+        expect(first('#admin_table'))
+          .to_not have_content 'todelete.aliasdomain.com'
       end
 
       it 'lists aliases' do
-        expect(find('#alias_table tr:nth-child(3) > td:nth-child(1)'))
-          .to have_content 'admin@foobar.com'
-        expect(find('#alias_table tr:nth-child(3) > td:nth-child(2)'))
-          .to have_content 'postmaster@foobar.com'
+        text = 'admin@foobar.com'
+        expect(page).to have_selector(
+          '#admin_table tr:nth-child(3) > td:nth-child(2)',
+          text: Regexp.new(Regexp.escape(text))
+        )
+      end
+
+      it 'does not list deleted aliases' do
+        text = 'todelete.alias@foobar.com'
+        expect(page).to_not have_selector(
+          '#admin_table',
+          text: Regexp.new(Regexp.escape(text))
+        )
+      end
+
+      it 'lists alias tos' do
+        text = 'postmaster@foobar.com'
+        expect(page).to have_selector(
+          '#admin_table tr:nth-child(3) > td:nth-child(3)',
+          text: Regexp.new(Regexp.escape(text))
+        )
       end
 
       it 'lists mailboxes' do
         expect(find('#mailbox_table')).to have_content 'postmaster@foobar.com'
+      end
+
+      it 'does not list deleted mailboxes' do
+        expect(find('#mailbox_table'))
+          .to_not have_content 'todelete.mailbox@foobar.com'
       end
     end # in virtual list
   end # capybara tests

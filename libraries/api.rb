@@ -18,62 +18,95 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-module PostfixAdmin
+require 'csv'
+require_relative 'api_http'
+
+module PostfixadminCookbook
   # Static class to make PostfixAdmin API calls
   class API
-    def initialize(ssl = false, port = nil, username = nil, password = nil)
-      @http = API::HTTP.new(username, password, ssl, port)
+    unless defined?(::PostfixadminCookbook::API::IGNORE_CSV_FIELD_REGEXP)
+      IGNORE_CSV_FIELD_REGEXP = /^(&nbsp;|\s)*$/
     end
 
-    def create_admin(username, password, setup_password)
+    def load_depends
+      return if defined?(Addressable)
+      Chef::Log.info("Trying to load 'addressable' at runtime.")
+      Gem.clear_paths
+      require 'addressable'
+    end
+
+    def initialize(ssl = false, port = nil, username = nil, password = nil)
+      @ssl = ssl
+      @port = port
+      @http = API::HTTP.new(username, password, @ssl, @port)
+      load_depends
+    end
+
+    def setup?(username, password)
+      http = API::HTTP.new(username, password, @ssl, @port)
+      http.login.is_a?(String)
+    rescue API::HTTP::TokenError
+      false
+    end
+
+    def setup_admin(username, password, setup_password)
       @http.setup(username, password, setup_password)
     end
 
-    def create_domain(domain, description, aliases, mailboxes)
-      body = {
-        fDomain: domain,
-        fDescription: description,
-        fAliases: aliases,
-        fMailboxes: mailboxes,
-        submit: 'Add+Domain'
-      }
-      @http.post('/create-domain.php', body)
+    def parse_csv_line(line)
+      first = line.shift
+      # HACK: Avoid "&snbp;" values in the first column:
+      first = line.shift if first.match(IGNORE_CSV_FIELD_REGEXP)
+      [first, line]
     end
 
-    # rubocop:disable Metrics/ParameterLists
-    def create_mailbox(username, domain, password, name, active, mail)
-      # rubocop:enable Metrics/ParameterLists
-      body = {
-        fUsername: username,
-        fDomain: domain,
-        fPassword: password, fPassword2: password,
-        fName: name,
-        submit: 'Add+Mailbox'
-      }
-      body['fActive'] = 'on' if active
-      body['fMail'] = 'on' if mail
-      @http.post('/create-mailbox.php', body)
+    def parse_csv(csv)
+      csv.shift if [["\xEF\xBB\xBF"], ['']].include?(csv.first)
+      csv.shift # CSV header
+      csv.each_with_object({}) do |line, memo|
+        k, v = parse_csv_line(line)
+        memo[k] = v
+      end
     end
 
-    def create_alias(address, domain, goto, active)
-      body = {
-        fAddress: address,
-        fDomain: domain,
-        fGoto: goto,
-        submit: 'Add+Alias'
-      }
-      body['fActive'] = 'on' if active
-      @http.post('/create-alias.php', body)
+    def list_table(table)
+      @http.get("/list.php?table=#{table}&output=csv") do |body|
+        csv = CSV.parse(body, col_sep: ';')
+        parse_csv(csv)
+      end
     end
 
-    def create_alias_domain(alias_domain, target_domain, active)
-      body = {
-        alias_domain: alias_domain,
-        target_domain: target_domain,
-        submit: 'Add+Alias+Domain'
-      }
-      body['active'] = '1' if active
-      @http.post('/create-alias-domain.php', body)
+    def create_to_table(table, value)
+      %i(active superadmin welcome_mail default_aliases).each do |key|
+        value[key] = value[key] ? 1 : 0 if value.key?(key)
+      end
+      value[:password2] = value[:password] if value.key?(:password)
+      uri = Addressable::URI.parse('/edit.php')
+      uri.query_values = { table: table }
+      body = { submit: "Add+#{table.capitalize}", table: table, value: value }
+      @http.post(uri.normalize.to_s, body)
+    end
+
+    def delete_from_table(table, value)
+      uri = Addressable::URI.parse('/delete.php')
+      uri.query_values = { table: table, delete: value }
+      @http.delete(uri.normalize.to_s)
+    end
+
+    %w(admin domain mailbox alias alias_domain).each do |resource|
+      table = resource.delete('_')
+
+      define_method("#{resource}_exist?") do |value|
+        list_table(table).key?(value.to_s)
+      end
+
+      define_method("create_#{resource}") do |value|
+        create_to_table(table, value)
+      end
+
+      define_method("delete_#{resource}") do |value|
+        delete_from_table(table, value)
+      end
     end
   end
 end

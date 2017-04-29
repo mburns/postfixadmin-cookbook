@@ -18,7 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-module PostfixAdmin
+module PostfixadminCookbook
   class API
     # Internal wrapper to send PostfixAdmin HTTP calls
     class HTTP
@@ -38,29 +38,25 @@ module PostfixAdmin
 
         # rubocop:enable Style/ClassVars
 
-        def self.default_proto(ssl)
+        def default_proto(ssl)
           ssl ? 'https' : 'http'
         end
 
-        def self.default_port(ssl)
+        def default_port(ssl)
           ssl ? 443 : 80
         end
 
-        def self.create_uri(path, ssl, port)
+        def create_uri(path, ssl, port)
           proto = default_proto(ssl)
           port = default_port(ssl) if port.nil?
           URI.parse("#{proto}://127.0.0.1:#{port}#{path}")
         end
 
-        def self.user_agent
-          if defined?(Chef::HTTP::HTTPRequest)
-            Chef::HTTP::HTTPRequest.user_agent
-          else
-            Chef::REST::RESTRequest.user_agent
-          end
+        def user_agent
+          Chef::HTTP::HTTPRequest.user_agent
         end
 
-        def self.create_http(uri, ssl)
+        def create_http(uri, ssl)
           http = Net::HTTP.new(uri.host, uri.port)
           if ssl
             require 'net/https'
@@ -71,7 +67,7 @@ module PostfixAdmin
           http
         end
 
-        def self.create_request(method, uri)
+        def create_request(method, uri)
           case method.downcase
           when 'post'
             request = Net::HTTP::Post.new(uri.request_uri)
@@ -80,106 +76,137 @@ module PostfixAdmin
             request = Net::HTTP::Get.new(uri.request_uri)
           end
           request['User-Agent'] = user_agent
-          request['Cookie'] = cookie unless cookie.nil?
+          request['Cookie'] = self.class.cookie unless self.class.cookie.nil?
           request
         end
 
-        def self.parse_cookie(response)
-          if response['Set-Cookie'].is_a?(String)
-            self.cookie = response['set-cookie'].split(';')[0]
-            Chef::Log.debug("#{name}##{__method__} cookie: #{cookie}")
-          end
+        def parse_cookie(response)
+          return unless response['Set-Cookie'].is_a?(String)
+          self.class.cookie = response['Set-Cookie'].split(';')[0]
+          Chef::Log.debug(
+            "#{self.class.name}##{__method__} cookie: #{self.class.cookie}"
+          )
         end
 
-        def self.parse_response(response)
+        def parse_response(response)
           parse_cookie(response)
           response
         end
 
         def initialize(method, path, body, ssl, port)
-          uri = self.class.create_uri(path, ssl, port)
+          uri = create_uri(path, ssl, port)
           Chef::Log.debug("#{self.class}: #{method} #{uri}")
-          @http = self.class.create_http(uri, ssl)
-          @request = self.class.create_request(method, uri)
-          @request.set_form_data(body) unless body.nil?
+          @http = create_http(uri, ssl)
+          @request = create_request(method, uri)
+          @request.set_form_data(serialize_body(body)) unless body.nil?
+        end
+
+        #
+        # Returns a key, value pair for processing it with PHP web application.
+        #
+        # @param key [String, Symbol] Name of the hash key.
+        # @param value [Mixed] value of the key.
+        # @return [Array<Array>] an array of arrays with the key, value pairs.
+        # @example
+        #   serialize_php_body('key1', sub1: 'a', sub2: 'b')
+        #     #=> [["key1[sub1]", "a"], ["key1[sub2]", "b"]]
+        #   serialize_php_body('key1', sub1: 'a', sub2: { subsub3: 'b' })
+        #     #=> [["key1[sub1]", "a"], ["key1[sub2][subsub3]", "b"]]
+        def serialize_php_body(key, value)
+          case value
+          when Hash then value.reduce([]) do |m, (k2, v2)|
+                           m + serialize_php_body("#{key}[#{k2}]", v2)
+                         end
+          when Array then value.reduce([]) do |m, v2|
+                            # TODO: only one value is accepted for arrays
+                            m + serialize_php_body("#{key}[]", v2)
+                          end
+          else [[key, value]]
+          end
+        end
+
+        def serialize_body(body)
+          return body unless body.is_a?(Hash)
+          body.reduce({}) do |hs, (key, value)|
+            hs.merge(serialize_php_body(key, value).to_h)
+          end
         end
 
         def response
           response = @http.request(@request)
-          self.class.parse_response(response)
+          parse_response(response)
         end
       end # Request
 
-      unless defined?(::PostfixAdmin::API::HTTP::STDOUT_REGEXP)
-        STDOUT_REGEXP = /^.*class=['"]standout['"][^>]*>([^\n]*?)\n.*$/m
+      unless defined?(::PostfixadminCookbook::API::HTTP::ERROR_REGEXS)
+        ERROR_REGEXS = [
+          /^.*class=['"]error_msg['"][^>]*>([^<]+)<.*$/m,
+          /^.*(Invalid\s+token!).*$/m
+        ].freeze
       end
-      unless defined?(::PostfixAdmin::API::HTTP::ERROR_REGEXP)
-        ERROR_REGEXP = /^.*class=['"]error_msg['"][^>]*>([^<]*)<.*$/m
+      unless defined?(::PostfixadminCookbook::API::HTTP::SETUP_OK_REGEX)
+        SETUP_OK_REGEX = /You +are +done +with +your +basic +setup/
       end
-      unless defined?(::PostfixAdmin::API::HTTP::SETUP_ERROR_REGEXP)
-        SETUP_ERROR_REGEXP = /Setup +password +not +specified +correctly/
+      unless defined?(::PostfixadminCookbook::API::HTTP::SETUP_ERROR_REGEXS)
+        SETUP_ERROR_REGEXS = [
+          %r{^.*<b>(Error: .+)</b>.*Please fix the errors listed above.*$}m,
+          /^.*class=['"]standout['"][^>]*>([^<]+?)<.*$/m,
+          %r{^.*<tr>\s*(?:<td>.+?</td>\s*){2}<td>([^<]+?)</td>\s*</tr>.*$}m
+        ].freeze
       end
+      unless defined?(::PostfixadminCookbook::API::HTTP::DELETE_ERROR_REGEX)
+        DELETE_ERROR_REGEX =
+          %r{^.*class=['"]flash-error['"][^>]*>(?:<li>)?([^<]+?)(?:</li>)?<.*$}m
+      end
+      unless defined?(::PostfixadminCookbook::API::HTTP::TOKEN_REGEX)
+        TOKEN_REGEX = /^.*<input\s+[^>]*name="token"\s+value="([^"]+)".*$/m
+      end
+
+      class TokenError < StandardError; end
 
       # rubocop:disable Style/ClassVars
 
-      @@authenticated = false
+      @@token = nil
 
-      def self.authenticated=(arg)
-        @@authenticated = arg
+      def self.token
+        @@token
       end
 
-      def self.authenticated?
-        @@authenticated == true
+      def self.token=(arg)
+        @@token = arg
       end
 
       # rubocop:enable Style/ClassVars
 
-      def self.strip_html(html)
+      def strip_html(html)
         html.gsub(%r{</?[^>]+?>}, ' ')
       end
 
-      def self.parse_response_error(body)
-        if body.match(ERROR_REGEXP)
-          error_msg = "#{name}##{__method__}: #{body.gsub(ERROR_REGEXP, '\1')}"
-          Chef::Log.fatal(error_msg)
-          fail error_msg
-        elsif body.match(SETUP_ERROR_REGEXP)
-          fail strip_html(body.gsub(STDOUT_REGEXP, '\1'))
+      def error(error_msg, e_class = RuntimeError)
+        Chef::Log.fatal(error_msg) if e_class == RuntimeError
+        raise e_class, error_msg
+      end
+
+      def parse_setup(body)
+        return if body.match(SETUP_OK_REGEX)
+        SETUP_ERROR_REGEXS.each do |regexp|
+          next unless body.match(regexp)
+          error(strip_html(body.gsub(regexp, '\1')))
+        end
+        error("Unknown error during the setup of Postfix Admin:\n\n#{body}")
+      end
+
+      def parse_response(body, regexps = nil)
+        (regexps ? [regexps].flatten : ERROR_REGEXS).each do |regexp|
+          next unless body.match(regexp)
+          error(strip_html(body.gsub(regexp, '\1')))
         end
       end
 
-      def self.parse_response_body(body)
-        parse_response_error(body)
-        strip_html(body.gsub(STDOUT_REGEXP, '\1')) if body.match(STDOUT_REGEXP)
-      end
-
-      def self.request(method, path, body, ssl, port)
-        response = API::HTTP::Request.new(method, path, body, ssl, port)
-                   .response
-        if response.code.to_i >= 400
-          error_msg =
-            "#{name}##{__method__}: #{response.code} #{response.message}"
-          Chef::Log.fatal(error_msg)
-          fail error_msg
-        else
-          parse_response_body(response.body)
-        end
-      end
-
-      def self.get(path, ssl = false, port = nil)
-        request('get', path, nil, ssl, port)
-      end
-
-      def self.post(path, body, ssl = false, port = nil)
-        request('post', path, body, ssl, port)
-      end
-
-      def self.index(ssl = false, port = nil)
-        get('/login.php', ssl, port)
-      end
-
-      def self.setup(body, ssl = false, port = nil)
-        post('/setup.php', body, ssl, port)
+      def request(method, path, body, ssl, port)
+        resp = API::HTTP::Request.new(method, path, body, ssl, port).response
+        error("#{resp.code} #{resp.message}") if resp.code.to_i >= 400
+        block_given? ? yield(resp.body) : parse_response(resp.body)
       end
 
       attr_writer :username, :password, :ssl
@@ -192,37 +219,43 @@ module PostfixAdmin
       end
 
       def setup(username, password, setup_password)
-        body = {
-          form: 'createadmin',
-          setup_password: setup_password,
-          fUsername: username,
-          fPassword: password, fPassword2: password,
-          submit: 'Add+Admin'
-        }
-        self.class.setup(body, @ssl, @port)
+        body = { form: 'createadmin', setup_password: setup_password,
+                 username: username, password: password, password2: password,
+                 submit: 'Add+Admin' }
+        request('post', '/setup.php', body, @ssl, @port) { |x| parse_setup(x) }
+      end
+
+      def get_token(url, ssl = false, port = nil)
+        request('get', url, nil, ssl, port) do |x|
+          error('Token not found.', TokenError) unless x.match(TOKEN_REGEX)
+          self.class.token = x.gsub(TOKEN_REGEX, '\1')
+        end
       end
 
       def login
-        return if self.class.authenticated?
-        self.class.index(@ssl, @port)
-        body = {
-          fUsername: @username,
-          fPassword: @password,
-          lang: 'en',
-          submit: 'Login'
-        }
-        self.class.post('/login.php', body, @ssl, @port)
-        self.class.authenticated = true
+        return unless self.class.token.nil?
+        request('get', '/login.php', nil, @ssl, @port) # get cookie
+        body = { fUsername: @username, fPassword: @password, lang: 'en',
+                 submit: 'Login' }
+        request('post', '/login.php', body, @ssl, @port)
+        get_token('/edit.php?table=domain', @ssl, @port)
       end
 
-      def get(path)
+      def get(path, &block)
         login
-        self.class.get(path, @ssl, @port)
+        request('get', path, nil, @ssl, @port, &block)
       end
 
-      def post(path, body)
+      def post(path, body, &block)
         login
-        self.class.post(path, body, @ssl, @port)
+        body[:token] = self.class.token unless self.class.token.nil?
+        request('post', path, body, @ssl, @port, &block)
+      end
+
+      def delete(path)
+        get("#{path}&token=#{self.class.token}") do |x|
+          parse_response(x, DELETE_ERROR_REGEX)
+        end
       end
     end
   end

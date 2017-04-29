@@ -1,9 +1,13 @@
 PostfixAdmin Cookbook
 =====================
+[![GitHub](http://img.shields.io/badge/github-zuazo/postfixadmin--cookbook-blue.svg?style=flat)](https://github.com/zuazo/postfixadmin-cookbook)
+[![License](https://img.shields.io/github/license/zuazo/postfixadmin-cookbook.svg?style=flat)](#license-and-author)
+
 [![Cookbook Version](https://img.shields.io/cookbook/v/postfixadmin.svg?style=flat)](https://supermarket.chef.io/cookbooks/postfixadmin)
 [![Dependency Status](http://img.shields.io/gemnasium/zuazo/postfixadmin-cookbook.svg?style=flat)](https://gemnasium.com/zuazo/postfixadmin-cookbook)
 [![Code Climate](http://img.shields.io/codeclimate/github/zuazo/postfixadmin-cookbook.svg?style=flat)](https://codeclimate.com/github/zuazo/postfixadmin-cookbook)
 [![Build Status](http://img.shields.io/travis/zuazo/postfixadmin-cookbook.svg?style=flat)](https://travis-ci.org/zuazo/postfixadmin-cookbook)
+[![Coverage Status](http://img.shields.io/coveralls/zuazo/postfixadmin-cookbook.svg?style=flat)](https://coveralls.io/r/zuazo/postfixadmin-cookbook?branch=master)
 
 Installs and configures [PostfixAdmin](http://postfixadmin.sourceforge.net/), a web based interface used to manage mailboxes, virtual domains and aliases.
 
@@ -32,7 +36,6 @@ Table of Contents
   - [Including in a Cookbook Recipe](#including-in-a-cookbook-recipe)
   - [Including in the Run List](#including-in-the-run-list)
 - [PostgreSQL Support](#postgresql-support)
-  - [PostgreSQL Support on Debian and Ubuntu](#postgresql-support-on-debian-and-ubuntu)
   - [PostgreSQL Versions < 9.3](#postgresql-versions--93)
 - [Deploy with Docker](#deploy-with-docker)
 - [Testing](#testing)
@@ -63,18 +66,23 @@ Please, [let us know](https://github.com/zuazo/postfixadmin-cookbook/issues/new?
 * [apache2](https://supermarket.chef.io/cookbooks/apache2)
 * [ark](https://supermarket.chef.io/cookbooks/ark)
 * [database](https://supermarket.chef.io/cookbooks/database)
-* [encrypted_attributes (~> 0.2)](https://supermarket.chef.io/cookbooks/encrypted_attributes)
+* [encrypted_attributes](https://supermarket.chef.io/cookbooks/encrypted_attributes)
 * [mysql](https://supermarket.chef.io/cookbooks/mysql)
-* [nginx](https://supermarket.chef.io/cookbooks/nginx)
+* [chef_nginx](https://supermarket.chef.io/cookbooks/chef_nginx)
+* [compat_resource](https://supermarket.chef.io/cookbooks/compat_resource)
+* [openssl](https://supermarket.chef.io/cookbooks/openssl)
 * [php](https://supermarket.chef.io/cookbooks/php)
 * [php-fpm](https://supermarket.chef.io/cookbooks/php-fpm)
-* [postgresql (>= 1.0.0)](https://supermarket.chef.io/cookbooks/postgresql)
+* [postgresql](https://supermarket.chef.io/cookbooks/postgresql)
 * [ssl_certificate](https://supermarket.chef.io/cookbooks/ssl_certificate)
 * [yum-epel](https://supermarket.chef.io/cookbooks/yum-epel)
 
 ## Required Applications
 
-* Ruby `1.9.3` or higher.
+* Chef `12.5` or higher.
+* Ruby `2.2` or higher.
+
+Only Postfix Admin version `3` or higher is supported by this cookbook. For older versions, use cookbook versions `< 3`.
 
 ## Other Requirements
 
@@ -105,7 +113,7 @@ Attributes
 
 | Attribute                                             | Default                 | Description                    |
 |:------------------------------------------------------|:------------------------|:-------------------------------|
-| `node['postfixadmin']['version']`                     | `'2.3.7'`               | PostfixAdmin version
+| `node['postfixadmin']['version']`                     | `'3.0.2'`               | PostfixAdmin version
 | `node['postfixadmin']['url']`                         | *calculated*            | PostfixAdmin download URL
 | `node['postfixadmin']['checksum']`                    | *calculated*            | PostfixAdmin download file checksum
 | `node['postfixadmin']['port']`                        | *calculated*            | PostfixAdmin listen port
@@ -201,25 +209,30 @@ Resources
 
 ## postfixadmin_admin[user]
 
-Create or remove a PostfixAdmin admin user. This kind of user is used to create the domains and mailboxes.
+Create or delete a PostfixAdmin admin user.
+
+This kind of user is used to create the domains and mailboxes, and must be used before any other resource from this cookbook.
 
 ### postfixadmin_admin Actions
 
 * `create`: Create a PostfixAdmin admin user (default).
-* `remove`: Remove a PostfixAdmin admin user.
+* `delete`: Remove a PostfixAdmin admin user.
 
-### postfixadmin_admin Parameters
+### postfixadmin_admin Properties
 
-| Parameter      | Default                       | Description                    |
+| Property       | Default                       | Description                    |
 |:---------------|:------------------------------|:-------------------------------|
 | user           | *name attribute*              | Username
-| password       | `'p@ssw0rd1'`                 | Password
+| password       | *required*                    | Password
 | setup_password | *calculated*                  | PostfixAdmin Setup Password
-| db_user        | *calculated*                  | Database username
-| db_password    | *calculated*                  | Database password
-| db_name        | *calculated*                  | Database name
-| db_host        | *calculated*                  | Database hostname
+| superadmin     | `true`                        | Whether it has access to all domains
+| domains        | `[]`                          | List of domains it has access to
+| active         | `true`                        | Active status
+| login_username | *optional*                    | Admin user to use for its creation
+| login_password | *optional*                    | Admin password to use for its creation
 | ssl            | `node['postfixadmin']['ssl']` | Whether to use SSL on HTTP requests
+
+If you don't provide `login_username`, it will use the *setup.php* to create the admin. Usually this is used only to create the first administrator.
 
 ### postfixadmin_admin Example
 
@@ -228,31 +241,36 @@ postfixadmin_admin 'admin@admindomain.com' do
   password 'sup3r-s3cr3t-p4ss'
   action :create
 end
+
+postfixadmin_admin 'secondadmin@admindomain.com' do
+  password '4n0th3r-p4ss'
+  login_username 'admin@admindomain.com'
+  login_password 'sup3r-s3cr3t-p4ss'
+end
 ```
 
 ## postfixadmin_domain[domain]
 
-Create domains.
+Create or delete a domain.
 
 ### postfixadmin_domain Actions
 
 * `create`
+* `delete`
 
-### postfixadmin_domain Parameters
+### postfixadmin_domain Properties
 
-| Parameter      | Default                       | Description                    |
-|:---------------|:------------------------------|:-------------------------------|
-| domain         | *name attribute*              | Domain name
-| description    | `''`                          | Domain description
-| aliases        | `10`                          | Maximum number of aliases
-| mailboxes      | `10`                          | Maximum number of mailboxes
-| login_username | *required*                    | Admin user to use
-| login_password | *required*                    | Admin password 
-| db_user        | *calculated*                  | Database username
-| db_password    | *calculated*                  | Database password
-| db_name        | *calculated*                  | Database name
-| db_host        | *calculated*                  | Database hostname
-| ssl            | `node['postfixadmin']['ssl']` | Whether to use SSL on HTTP requests
+| Property        | Default                       | Description                    |
+|:----------------|:------------------------------|:-------------------------------|
+| domain          | *name attribute*              | Domain name
+| description     | `''`                          | Domain description
+| aliases         | `10`                          | Maximum number of aliases
+| mailboxes       | `10`                          | Maximum number of mailboxes
+| active          | `true`                        | Active status
+| default_aliases | `false`                       | Whether to include default aliases
+| login_username  | *required*                    | Admin user to use
+| login_password  | *required*                    | Admin password
+| ssl             | `node['postfixadmin']['ssl']` | Whether to use SSL on HTTP requests
 
 ### postfixadmin_domain Example
 
@@ -266,15 +284,16 @@ end
 
 ## postfixadmin_mailbox[mailbox]
 
-Create a mailbox.
+Create or delete a mailbox.
 
 ### postfixadmin_mailbox Actions
 
 * `create`
+* `delete`
 
-### postfixadmin_mailbox Parameters
+### postfixadmin_mailbox Properties
 
-| Parameter      | Default                       | Description                    |
+| Property       | Default                       | Description                    |
 |:---------------|:------------------------------|:-------------------------------|
 | mailbox        | *name attribute*              | Mailbox address to create
 | password       | *required*                    | Mailbox password
@@ -282,11 +301,7 @@ Create a mailbox.
 | active         | `true`                        | Active status
 | mail           | `false`                       | Whether to send a welcome email
 | login_username | *required*                    | Admin user to use
-| login_password | *required*                    | Admin password 
-| db_user        | *calculated*                  | Database username
-| db_password    | *calculated*                  | Database password
-| db_name        | *calculated*                  | Database name
-| db_host        | *calculated*                  | Database hostname
+| login_password | *required*                    | Admin password
 | ssl            | `node['postfixadmin']['ssl']` | Whether to use SSL on HTTP requests
 
 ### postfixadmin_mailbox Example
@@ -302,25 +317,22 @@ end
 
 ## postfixadmin_alias[address]
 
-Create mailbox aliases.
+Create or delete a mailbox alias.
 
 ### postfixadmin_alias Actions
 
 * `create`
+* `delete`
 
-### postfixadmin_alias Parameters
+### postfixadmin_alias Properties
 
-| Parameter      | Default                       | Description                    |
+| Property       | Default                       | Description                    |
 |:---------------|:------------------------------|:-------------------------------|
 | address        | *name attribute*              | Alias address
 | goto           | *required*                    | Destination mailbox address
 | active         | `true`                        | Active status
 | login_username | *required*                    | Admin user to use
-| login_password | *required*                    | Admin password 
-| db_user        | *calculated*                  | Database username
-| db_password    | *calculated*                  | Database password
-| db_name        | *calculated*                  | Database name
-| db_host        | *calculated*                  | Database hostname
+| login_password | *required*                    | Admin password
 | ssl            | `node['postfixadmin']['ssl']` | Whether to use SSL on HTTP requests
 
 ### postfixadmin_alias Example
@@ -336,25 +348,24 @@ end
 
 ## postfixadmin_alias_domain[address]
 
-Create domain aliases. The `alias_domain` must already exist.
+Create or remote a domain alias.
+
+The domain name used as `alias_domain` must already exist: in other words, it needs to be created previously with `postfixadmin_domain` resource.
 
 ### postfixadmin_alias_domain Actions
 
 * `create`
+* `delete`
 
-### postfixadmin_alias_domain Parameters
+### postfixadmin_alias_domain Properties
 
-| Parameter      | Default                       | Description                    |
+| Property       | Default                       | Description                    |
 |:---------------|:------------------------------|:-------------------------------|
 | alias_domain   | *name attribute*              | Alias domain
 | target_domain  | *required*                    | Target domain
 | active         | `true`                        | Active status
 | login_username | *required*                    | Admin user to use
-| login_password | *required*                    | Admin password 
-| db_user        | *calculated*                  | Database username
-| db_password    | *calculated*                  | Database password
-| db_name        | *calculated*                  | Database name
-| db_host        | *calculated*                  | Database hostname
+| login_password | *required*                    | Admin password
 | ssl            | `node['postfixadmin']['ssl']` | Whether to use SSL on HTTP requests
 
 ### postfixadmin_alias_domain Example
@@ -444,19 +455,6 @@ PostgreSQL Support
 
 PostfixAdmin with PostgreSQL may not work properly on some platforms: See for example [`postgresql` cookbook issue #249](https://github.com/hw-cookbooks/postgresql/issues/249). [Any feedback you can provide regarding the PostgreSQL support](https://github.com/zuazo/postfixadmin-cookbook/issues/new?title=PostgreSQL%20Support) will be greatly appreciated.
 
-## PostgreSQL Support on Debian and Ubuntu
-
-Due to [`postgresql` cookbook issue #108](https://github.com/hw-cookbooks/postgresql/issues/108), you should configure your system locale correctly for PostgreSQL to work. You can use the `locale` cookbook to fix this. For example:
-
-```ruby
-ENV['LANGUAGE'] = ENV['LANG'] = node['locale']['lang']
-ENV['LC_ALL'] = node['locale']['lang']
-include_recipe 'locale'
-# ...
-node.default['postfixadmin']['database']['type'] = 'postgresql'
-include_recipe 'postfixadmin'
-```
-
 ## PostgreSQL Versions < 9.3
 
 If you are using PostgreSQL version `< 9.3`, you may need to adjust the `shmmax` and `shmall` kernel parameters to configure the shared memory. You can see [the example used for the integration tests](https://github.com/zuazo/postfixadmin-cookbook/tree/master/test/cookbooks/postfixadmin_test/recipes/_postgresql_memory.rb).
@@ -507,12 +505,12 @@ Assert that the *Chef Run* creates a PostfixAdmin admin user.
 expect(chef_run).to create_postfixadmin_admin(user)
 ```
 
-### remove_postfixadmin_admin(path)
+### delete_postfixadmin_admin(path)
 
-Assert that the *Chef Run* removes a PostfixAdmin admin user.
+Assert that the *Chef Run* deletes a PostfixAdmin admin user.
 
 ```ruby
-expect(chef_run).to remove_postfixadmin_admin(user)
+expect(chef_run).to delete_postfixadmin_admin(user)
 ```
 
 ### postfixadmin_alias(address)
@@ -532,6 +530,14 @@ Assert that the *Chef Run* creates a PostfixAdmin alias.
 expect(chef_run).to create_postfixadmin_alias(address)
 ```
 
+### delete_postfixadmin_alias(address)
+
+Assert that the *Chef Run* deletes a PostfixAdmin alias.
+
+```ruby
+expect(chef_run).to delete_postfixadmin_alias(address)
+```
+
 ### postfixadmin_alias_domain(alias_domain)
 
 Helper method for locating a `postfixadmin_alias_domain` resource in the collection.
@@ -547,6 +553,14 @@ Assert that the *Chef Run* creates a PostfixAdmin alias domain.
 
 ```ruby
 expect(chef_run).to create_postfixadmin_alias_domain(alias_domain)
+```
+
+### delete_postfixadmin_alias_domain(alias_domain)
+
+Assert that the *Chef Run* deletes a PostfixAdmin alias domain.
+
+```ruby
+expect(chef_run).to delete_postfixadmin_alias_domain(alias_domain)
 ```
 
 ### postfixadmin_domain(domain)
@@ -566,6 +580,14 @@ Assert that the *Chef Run* creates a PostfixAdmin domain.
 expect(chef_run).to create_postfixadmin_domain(domain)
 ```
 
+### delete_postfixadmin_domain(domain)
+
+Assert that the *Chef Run* deletes a PostfixAdmin domain.
+
+```ruby
+expect(chef_run).to delete_postfixadmin_domain(domain)
+```
+
 ### postfixadmin_mailbox(mailbox)
 
 Helper method for locating a `postfixadmin_mailbox` resource in the collection.
@@ -581,6 +603,14 @@ Assert that the *Chef Run* creates a PostfixAdmin mailbox.
 
 ```ruby
 expect(chef_run).to create_postfixadmin_mailbox(mailbox)
+```
+
+### delete_postfixadmin_mailbox(domain)
+
+Assert that the *Chef Run* deletes a PostfixAdmin mailbox.
+
+```ruby
+expect(chef_run).to delete_postfixadmin_mailbox(mailbox)
 ```
 
 Contributing

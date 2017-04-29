@@ -19,7 +19,7 @@
 
 require_relative '../spec_helper'
 
-describe 'postfixadmin::apache' do
+describe 'postfixadmin::apache', order: :random do
   let(:chef_run) do
     ChefSpec::SoloRunner.new do |node|
       node.set['postfixadmin']['ssl'] = true
@@ -61,7 +61,7 @@ describe 'postfixadmin::apache' do
     end
 
     it 'notifies apache restart' do
-      expect(resource).to notify('service[apache2]').to(:reload).immediately
+      expect(resource).to notify('service[apache2]').to(:restart).immediately
     end
 
     it 'subscribes to a2ensite postfixadmin' do

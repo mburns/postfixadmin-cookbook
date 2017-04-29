@@ -25,7 +25,7 @@ license 'Apache 2.0'
 description 'Installs and configures PostfixAdmin, a web based interface used '\
             'to manage mailboxes, virtual domains and aliases.'
 long_description IO.read(File.join(File.dirname(__FILE__), 'README.md'))
-version '2.2.0' # WiP
+version '3.1.0' # WiP
 
 if respond_to?(:source_url)
   source_url "https://github.com/zuazo/#{name}-cookbook"
@@ -34,6 +34,8 @@ if respond_to?(:issues_url)
   issues_url "https://github.com/zuazo/#{name}-cookbook/issues"
 end
 
+chef_version '>= 12.5' if respond_to?(:chef_version)
+
 supports 'amazon'
 supports 'debian'
 supports 'centos'
@@ -41,16 +43,18 @@ supports 'fedora'
 supports 'ubuntu'
 
 depends 'apache2', '~> 3.0'
-depends 'ark', '~> 0.9'
-depends 'database', '~> 4.0'
+depends 'ark', '~> 2.2'
+depends 'database', '~> 6.0'
 depends 'encrypted_attributes', '~> 0.2'
-depends 'mysql', '~> 6.0'
-depends 'chef_nginx', '~> 3.1'
-depends 'php', '~> 1.5'
+depends 'mysql', '~> 8.0'
+depends 'chef_nginx', '~> 5.0'
+depends 'compat_resource', '>= 12.5'
+depends 'openssl', '~> 6.0'
+depends 'php', '~> 2.0'
 depends 'php-fpm', '>= 0.7'
-depends 'postgresql', '~> 3.4'
+depends 'postgresql', '~> 6.0'
 depends 'mysql2_chef_gem', '~> 1.0'
-depends 'ssl_certificate', '~> 1.1'
+depends 'ssl_certificate', '~> 2.0'
 depends 'yum-epel', '~> 0.5'
 
 recipe 'postfixadmin::default', 'Installs and configures PostfixAdmin'
@@ -78,7 +82,7 @@ attribute 'postfixadmin/version',
           description: 'PostfixAdmin version',
           type: 'string',
           required: 'optional',
-          default: '2.3.7'
+          default: '3.0.2'
 
 attribute 'postfixadmin/url',
           display_name: 'postfixadmin URL',
@@ -167,10 +171,6 @@ attribute 'postfixadmin/web_server',
           required: 'optional',
           default: 'apache'
 
-grouping 'postfixadmin/database',
-         title: 'postfixadmin database',
-         description: 'PostfixAdmin database configuration options'
-
 attribute 'postfixadmin/database/manage',
           display_name: 'database manage',
           description: 'Whether to manage database creation.',
@@ -214,10 +214,6 @@ attribute 'postfixadmin/database/password',
           calculated: true,
           type: 'string',
           required: 'optional'
-
-grouping 'postfixadmin/mysql',
-         title: 'postfixadmin mysql',
-         description: 'PostfixAdmin MySQL configuration options'
 
 attribute 'postfixadmin/mysql/instance',
           display_name: 'mysql instance',
@@ -263,10 +259,6 @@ attribute 'postfixadmin/mysql/version',
           required: 'optional',
           calculated: true
 
-grouping 'postfixadmin/conf',
-         title: 'postfixadmin configuration',
-         description: 'PostfixAdmin configuration options (config.local.php)'
-
 attribute 'postfixadmin/conf/encrypt',
           display_name: 'encryption configuration',
           description: 'The way do you want the passwords to be crypted',
@@ -298,10 +290,6 @@ attribute 'postfixadmin/conf/fetchmail',
           required: 'optional',
           default: '"NO"'
 
-grouping 'postfixadmin/packages',
-         title: 'postfixadmin packages',
-         description: 'PostfixAdmin required packages'
-
 attribute 'postfixadmin/packages/requirements',
           display_name: 'postfixadmin packages requirements',
           description: 'PostfixAdmin required packages array',
@@ -324,19 +312,11 @@ attribute 'postfixadmin/packages/postgresql',
           required: 'optional',
           calculated: true
 
-grouping 'postfixadmin/mysql',
-         title: 'postfixadmin mysql',
-         description: 'PostfixAdmin MySQL server credentials'
-
 attribute 'postfixadmin/mysql/server_root_password',
           display_name: 'postfixadmin mysql server root password',
           description: 'PostfixAdmin MySQL root password.',
           type: 'string',
           calculated: true
-
-grouping 'postfixadmin/map_files',
-         title: 'postfixadmin map files',
-         description: 'PostfixAdmin map-files configuration options'
 
 attribute 'postfixadmin/map_files/path',
           display_name: 'map files path',

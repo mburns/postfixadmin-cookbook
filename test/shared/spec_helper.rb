@@ -19,6 +19,7 @@
 
 require 'serverspec'
 require 'infrataster/rspec'
+require_relative 'system_info_helpers'
 
 # Set backend type
 set :backend, :exec
@@ -26,6 +27,7 @@ set :backend, :exec
 ENV['PATH'] = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
 
 Infrataster::Server.define(:web, '127.0.0.1')
+Infrataster::Server.define(:db, '127.0.0.1')
 
 # Infrataster hack to ignore phantomjs SSL errors
 Infrataster::Contexts::CapybaraContext.class_eval do

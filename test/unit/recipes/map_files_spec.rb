@@ -19,11 +19,11 @@
 
 require_relative '../spec_helper'
 
-describe 'postfixadmin::map_files' do
+describe 'postfixadmin::map_files', order: :random do
   let(:chef_run) { ChefSpec::SoloRunner.new.converge(described_recipe) }
 
   it 'creates tables directory' do
-    allow(::File).to receive(:exist?).and_return(false)
+    allow(::File).to receive(:exist?).and_call_original
     allow(::File).to receive(:exist?).with('/etc/postfix/tables')
       .and_return(false)
     expect(chef_run).to create_directory('/etc/postfix/tables')
@@ -50,6 +50,7 @@ describe 'postfixadmin::map_files' do
         .with_mode('00640')
         .with_owner('root')
         .with_group('postfix')
+        .with_sensitive(true)
     end
   end
 end

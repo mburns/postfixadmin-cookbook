@@ -28,7 +28,7 @@ class Chef
   end
 end
 
-describe 'postfixadmin::default' do
+describe 'postfixadmin::default', order: :random do
   let(:db_name) { 'postfixadmin_db' }
   let(:db_user) { 'postfixadmin_user' }
   let(:db_password) { 'postfixadmin_pass' }
@@ -45,7 +45,7 @@ describe 'postfixadmin::default' do
     node.set['postfixadmin']['setup_password_salt'] = setup_password_salt
     node.set['postgresql']['password']['postgres'] = db_password
 
-    allow(Kernel).to receive(:require).with('sequel')
+    allow(Kernel).to receive(:require).with('addressable')
     allow(Kernel).to receive(:require).with('openssl')
     allow(Kernel).to receive(:require).with('digest/md5')
     allow(Kernel).to receive(:require).with('digest/sha1')
@@ -62,8 +62,9 @@ describe 'postfixadmin::default' do
     ).and_return(true)
   end
 
-  it 'installs the sequel gem' do
-    expect(chef_run).to install_chef_gem('sequel')
+  it 'installs the addressable gem at compile time' do
+    expect(chef_run).to install_chef_gem('addressable')
+      .with_compile_time(false)
   end
 
   it 'includes postfixadmin::mysql recipe' do
@@ -150,12 +151,26 @@ describe 'postfixadmin::default' do
     end
   end
 
+  it 'creates templates_c directory' do
+    expect(chef_run)
+      .to create_directory(
+        "#{node['ark']['prefix_root']}/postfixadmin/templates_c"
+      )
+      .with_owner('www-data')
+      .with_group('www-data')
+      .with_mode('00750')
+  end
+
   it 'creates configuration file' do
-    expect(chef_run).to create_template('config.local.php')
+    expect(chef_run)
+      .to create_template(
+        "#{node['ark']['prefix_root']}/postfixadmin/config.local.php"
+      )
       .with_source('config.local.php.erb')
       .with_owner('root')
       .with_group('www-data')
       .with_mode('0640')
+      .with_sensitive(true)
   end
 
   context 'on Ubuntu 12.04' do
@@ -170,6 +185,19 @@ describe 'postfixadmin::default' do
       end
     end
   end # context on Ubuntu 12.04
+
+  context 'on Ubuntu 16.04' do
+    before do
+      chef_runner.node.automatic['platform'] = 'ubuntu'
+      chef_runner.node.automatic['platform_version'] = '16.04'
+    end
+
+    %w(php-imap php-mysql).each do |pkg|
+      it "installs #{pkg} package" do
+        expect(chef_run).to install_package(pkg)
+      end
+    end
+  end # context on Ubuntu 16.04
 
   context 'on CentOS 5.10' do
     before do
@@ -230,6 +258,8 @@ describe 'postfixadmin::default' do
         .and_return(true)
       stub_command('ls /var/lib/postgresql/9.1/main/recovery.conf')
         .and_return(true)
+      stub_command('ls /var/lib/postgresql/9.5/main/recovery.conf')
+        .and_return(true)
       chef_runner.node.set['postfixadmin']['database']['type'] = 'postgresql'
     end
 
@@ -274,6 +304,19 @@ describe 'postfixadmin::default' do
         end
       end
     end # context on Ubuntu 12.04
+
+    context 'on Ubuntu 16.04' do
+      before do
+        chef_runner.node.automatic['platform'] = 'ubuntu'
+        chef_runner.node.automatic['platform_version'] = '16.04'
+      end
+
+      %w(php-pgsql).each do |pkg|
+        it "installs #{pkg} package" do
+          expect(chef_run).to install_package(pkg)
+        end
+      end
+    end # context on Ubuntu 16.04
 
     context 'on CentOS 5.10' do
       before do

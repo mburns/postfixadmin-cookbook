@@ -78,30 +78,13 @@ if node['postfixadmin']['database']['manage']
   case db_type
   when 'mysql'
 
-    mysql2_chef_gem 'default' do
-      action :install
-    end
-
-    mysql_connection_info = {
-      host: node['postfixadmin']['database']['host'],
-      username: 'root',
-      password: encrypted_attribute_read(
+    mysql_service node['postfixadmin']['database']['name'] do
+      bind_address node['postfixadmin']['database']['host']
+      run_user node['postfixadmin']['database']['user']
+      initial_root_password encrypted_attribute_read(
         %w(postfixadmin mysql server_root_password)
       )
-    }
-
-    mysql_database node['postfixadmin']['database']['name'] do
-      connection mysql_connection_info
-      action :create
-    end
-
-    mysql_database_user node['postfixadmin']['database']['user'] do
-      connection mysql_connection_info
-      database_name node['postfixadmin']['database']['name']
-      host node['postfixadmin']['database']['host']
-      password db_password
-      privileges [:all]
-      action :grant
+      action [:create, :start]
     end
 
   when 'postgresql'

@@ -44,7 +44,6 @@ supports 'ubuntu'
 
 depends 'apache2', '>= 3.0'
 depends 'ark', '>= 2.2'
-depends 'database', '>= 6.0'
 depends 'encrypted_attributes', '>= 0.2'
 depends 'mysql', '>= 8.0'
 depends 'nginx', '>= 7.0'

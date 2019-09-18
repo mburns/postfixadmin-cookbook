@@ -78,65 +78,50 @@ if node['postfixadmin']['database']['manage']
   case db_type
   when 'mysql'
 
-    mysql2_chef_gem 'default' do
-      action :install
-    end
-
-    mysql_connection_info = {
-      host: node['postfixadmin']['database']['host'],
-      username: 'root',
-      password: encrypted_attribute_read(
+    mysql_service node['postfixadmin']['database']['name'] do
+      bind_address node['postfixadmin']['database']['host']
+      run_user node['postfixadmin']['database']['user']
+      initial_root_password encrypted_attribute_read(
         %w(postfixadmin mysql server_root_password)
       )
-    }
-
-    mysql_database node['postfixadmin']['database']['name'] do
-      connection mysql_connection_info
-      action :create
-    end
-
-    mysql_database_user node['postfixadmin']['database']['user'] do
-      connection mysql_connection_info
-      database_name node['postfixadmin']['database']['name']
-      host node['postfixadmin']['database']['host']
-      password db_password
-      privileges [:all]
-      action :grant
+      action [:create, :start]
     end
 
   when 'postgresql'
 
-    include_recipe 'postgresql::ruby'
+    postgresql_client_install 'Postgresql Client' do
+      setup_repo false
+    end
 
-    postgresql_connection_info = {
-      host: '127.0.0.1',
-      username: 'postgres',
-      password: node['postgresql']['password']['postgres']
-    }
+    postgresql_server_install 'My Postgresql Server install' do
+      setup_repo false
+      password node['postgresql']['password']['postgres']
+    end
+
+    postgresql_server_conf 'PostgreSQL Config' do
+      notification :reload
+    end
 
     postgresql_database node['postfixadmin']['database']['name'] do
-      connection postgresql_connection_info
+      owner node['postfixadmin']['database']['user']
       action :create
     end
 
-    postgresql_database_user node['postfixadmin']['database']['user'] do
-      connection postgresql_connection_info
-      database_name node['postfixadmin']['database']['name']
-      host node['postfixadmin']['database']['host']
+    postgresql_user node['postfixadmin']['database']['user'] do
       password db_password
       privileges [:all]
-      action [:create, :grant]
+      action [:create]
     end
 
     # Based on @phlipper work from:
     # https://github.com/phlipper/chef-postgresql
-    language = 'plpgsql'
-    dbname = node['postfixadmin']['database']['name']
-    execute "createlang #{language} #{dbname}" do
-      user 'postgres'
-      not_if "psql -c 'SELECT lanname FROM pg_catalog.pg_language' #{dbname} "\
-        "| grep '^ #{language}$'", user: 'postgres'
-    end
+    # language = 'plpgsql'
+    # dbname = node['postfixadmin']['database']['name']
+    # execute "createlang #{language} #{dbname}" do
+    #   user 'postgres'
+    #   not_if "psql -c 'SELECT lanname FROM pg_catalog.pg_language' #{dbname} "\
+    #     "| grep '^ #{language}$'", user: 'postgres'
+    # end
 
   else
     raise "Unknown database type: #{db_type}"
